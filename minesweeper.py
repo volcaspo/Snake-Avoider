@@ -31,6 +31,17 @@ symbols = {
     "numbers": ["∙", "➀", "➁", "➂", "➃", "➄", "➅", "➆", "➇"]
 }
 
+adjacencies = [
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, -1),
+    (0, 1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+]
+
 def spacer(current_number, max_number):
     """
     Creates a string with an appropriate length of spaces based on the length of key numbers.
@@ -63,22 +74,32 @@ class Board():
                     "snake": False,
                     "number": 0,
                     }
+        self.tiles_list = list(self.tiles_dict.keys())
                 
     def set_snakes(self, starting_tile):
         """
         Sets a selection of the tiles to be snakes.
         Retries until the starting tile is not a snake.
         """
-        tiles_list = list(self.tiles_dict.keys())
-        tiles_list.remove(starting_tile)
-        snake_tiles = random.sample(tiles_list, k=self.snakes)
+        temp_tiles_list = self.tiles_list[:]
+        temp_tiles_list.remove(starting_tile)
+        snake_tiles = random.sample(temp_tiles_list, k=self.snakes)
         for tile in snake_tiles:
             self.tiles_dict[tile]["snake"] = True
         self.snake_tiles = snake_tiles
 
     def reveal_tile(self, coords):
-        pass
-    
+        surrounding_tiles = []
+        self.tile_dict[coords]["exposed"] = True
+        for adjacent in adjacencies:
+            tile = ((coords+adjacent[0]), (coords+adjacent[1]))
+            surrounding_tiles.append(tile)
+        for tile in surrounding_tiles:
+            if tile in self.tiles_list:
+                if self.tiles_dict[tile]["snake"] == False:
+                    self.tiles_dict[tile]["exposed"] = True
+
+
     def draw_board(self):
         """Creates a string to render the board"""
         board_render = f"{symbols['origin']}{spacer(0, self.rows)}"
