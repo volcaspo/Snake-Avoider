@@ -1,32 +1,9 @@
-# class Tile():
-#     """Represents a tile on the board"""
-#     def __init__(self, coords):
-#         self.coords = coords
-#         self.flag = False
-#         self.snake = False
-#         self.number = 0
-
-#     def add_flag(self, add=True):
-#         """Adds or removes a flag to or from the tile"""
-#         if add is True:
-#             self.flag = True
-#         if add is False:
-#             self.flag = False
-    
-#     def set_snake(self):
-#         """Sets a mine on a tile"""
-#         self.snake = True
-
-#     def set_number(self, number):
-#         """Sets a number for the tile"""
-#         self.number = number
-
 import random
 
 symbols = {
     "origin": "☺",
-    "flag": "▷",
-    "snake": "🐍",
+    "flag": "▹",
+    "snake": "S",
     "hidden": "∘",
     "numbers": ["∙", "➀", "➁", "➂", "➃", "➄", "➅", "➆", "➇"]
 }
@@ -55,12 +32,19 @@ def tile_spacer(max_number):
     spacer = " "*len(str(max_number))
     return spacer
 
+def error_message(first):
+    if first == True:
+        print("Coords not found. Check your formatting?! Example: '1,2'")
+    else:
+        print("Coords not found. Check your formatting?! Example: 'p 1,2'")
+
 class Board():
     """Represents the board containing the tiles"""
     def __init__(self, rows, columns, snakes):
         self.rows = rows
         self.columns = columns
         self.snakes = snakes
+        self.lose = False
 
     def build_tiles(self):
         """Initializes a dictionary of all the tiles on the board with default values"""
@@ -75,6 +59,7 @@ class Board():
                     "number": 0,
                     }
         self.tiles_list = list(self.tiles_dict.keys())
+        self.unexposed = self.tiles_list[:]
                 
     def set_snakes(self, starting_tile):
         """
@@ -83,22 +68,62 @@ class Board():
         """
         temp_tiles_list = self.tiles_list[:]
         temp_tiles_list.remove(starting_tile)
+        self.unexposed.remove(starting_tile)
+        for adjacent in adjacencies:
+            tile = ((starting_tile[0]+adjacent[0]), (starting_tile[1]+adjacent[1]))
+            if tile in self.tiles_list:
+                temp_tiles_list.remove(tile)
+                self.unexposed.remove(tile)
         snake_tiles = random.sample(temp_tiles_list, k=self.snakes)
         for tile in snake_tiles:
             self.tiles_dict[tile]["snake"] = True
+            self.unexposed.remove(tile)
         self.snake_tiles = snake_tiles
 
-    def reveal_tile(self, coords):
-        surrounding_tiles = []
-        self.tile_dict[coords]["exposed"] = True
-        for adjacent in adjacencies:
-            tile = ((coords+adjacent[0]), (coords+adjacent[1]))
-            surrounding_tiles.append(tile)
-        for tile in surrounding_tiles:
-            if tile in self.tiles_list:
-                if self.tiles_dict[tile]["snake"] == False:
-                    self.tiles_dict[tile]["exposed"] = True
+    def set_numbers(self):
+        """
+        Only use after snakes have been set.
+        Adds 1 to the number of every tile surrounding every snake.
+        """
+        for snake_tile in self.snake_tiles:
+            for adjacent in adjacencies:
+                tile = ((snake_tile[0]+adjacent[0]), (snake_tile[1]+adjacent[1]))
+                if tile in self.tiles_list:
+                    self.tiles_dict[tile]["number"] += 1
 
+    def reveal_tile(self, coords):
+        """
+        Only use if coords is not a snake.
+        Reveals selected tile, and reveals surroundings.
+        Chains the revealing of 0-tiles to save time.
+        """
+        to_reveal_surroundings = [coords]
+        self.tiles_dict[coords]["exposed"] = True
+        try:
+            self.unexposed.remove(coords)
+        except ValueError:
+            pass
+        while to_reveal_surroundings:
+            center_tile = to_reveal_surroundings.pop()
+            if self.tiles_dict[coords]["number"] == 0:
+                for adjacent in adjacencies:
+                    tile = ((center_tile[0]+adjacent[0]), (center_tile[1]+adjacent[1]))
+                    if tile in self.tiles_list:
+                        if self.tiles_dict[tile]["exposed"] is False:
+                            if self.tiles_dict[tile]["snake"] is False:
+                                self.tiles_dict[tile]["exposed"] = True
+                                try:
+                                    self.unexposed.remove(tile)
+                                except ValueError:
+                                    pass
+                                if self.tiles_dict[tile]["number"] == 0:
+                                    to_reveal_surroundings.append(tile)
+
+    def reveal_board(self):
+        """Reveals the entire board upon the game ending."""
+        for tile in self.tiles_list:
+            self.tiles_dict[tile]["exposed"] = True
+            self.tiles_dict[tile]["flag"] = False
 
     def draw_board(self):
         """Creates a string to render the board"""
@@ -129,33 +154,118 @@ class Board():
             board_render += f"{tile_render}{tile_spacer(self.columns)}"
             if coords[1] == self.columns:
                 board_render += "\n"
+        print()
         print(board_render)
 
+    def user_action(self, message, first=False):
+        """Performs an action based on user input."""
+        while True:
+            if first == True:
+                coord = input(message)
+            else:
+                user_input = input(message)
+                inputs = user_input.split(" ")
+                try:
+                    action = inputs[0]
+                    coord = inputs[1]
+                except IndexError:
+                    error_message(first)
+                    continue
+            coord_list = coord.split(",")
+            try:
+                coord_tuple = (int(coord_list[0]), int(coord_list[1]))
+            except ValueError:
+                error_message(first)
+                continue
 
+            if coord_tuple in self.tiles_list:
+                if first == True:
+                    self.set_snakes(coord_tuple)
+                    self.set_numbers()
+                    self.reveal_tile(coord_tuple)
+                    break
+            else:
+                error_message(first)
+                continue
+
+            if action in ["f", "p"]:
+                if action == "f":
+                    if self.tiles_dict[coord_tuple]["exposed"] == True:
+                        print("Can't flag an exposed tile!!!")
+                        continue
+                    elif self.tiles_dict[coord_tuple]["exposed"] == False:
+                        self.flag_tile(coord_tuple)
+                        break
+                if action == "p":
+                    if self.tiles_dict[coord_tuple]["exposed"] == True:
+                        print("Can't pounce on an exposed tile!!!")
+                        continue
+                    if self.tiles_dict[coord_tuple]["snake"] == True:
+                        self.lose = True
+                        self.reveal_board()
+                    elif self.tiles_dict[coord_tuple]["snake"] == False:
+                        self.reveal_tile(coord_tuple)
+                    break
+            else:
+                print("Action not recognized. Check your formatting?!")
+                continue
 
     def flag_tile(self, coords):
-        pass
-    
-                
+        self.tiles_dict[coords]["flag"] = True
+        
+def get_positive_int(message, amount_type):
+    """Ensures that an input is an integer. Takes 'idk' as a randomizer."""
+    if amount_type == "rows" or "columns":
+        greater_than = 3
+    if amount_type == "snakes":
+        greater_than = 0
+        max_value = (area-10)
+    while True:
+        value = input(message)
+        if value == 'idk':
+            if amount_type == "rows" or amount_type == "columns":
+                value = random.randint(5, 40)
+            elif amount_type == "snakes":
+                value = random.randint((int((area-10)*0.1)+1), (int((area-10)*0.4)))
+            print(f"There are obviously {value}.")
+            break
+        try:
+            value = int(value)
+        except ValueError:
+            print("Must be an integer!!")
+        else:
+            if value <= greater_than:
+                print(f"Must be greater than {greater_than}!!!!")
+            elif amount_type == "snakes":
+                if value > max_value:
+                    print(f"Must leave at least 10 open spaces! At most, {max_value}!!!")
+                else:
+                    break
+            else:
+                break
+    return value
 
 
-
-game = Board(9, 9, 80)
+# Gameplay loop (not a loop yet)
+print("Hello, welcome to snake avoider!")
+rows = get_positive_int(f"\nHow many rows are in your lawn? (Type 'idk' if you don't know)\n", "rows")
+columns = get_positive_int(f"\nHow many columns are in your lawn?\n", "columns")
+area = rows*columns
+snakes = get_positive_int(f"\nHow many snakes are in your lawn? (Type 'idk' if you don't know)\n", "snakes")
+game = Board(rows, columns, snakes)
 game.build_tiles()
-game.set_snakes((5, 5))
-print(game.snake_tiles)
-print(game.tiles_dict)
-print((5, 5) in game.snake_tiles)
-
-#game.tiles_dict[(2, 5)]["flag"] = True
-#game.draw_board()
-
-# active = True
-# while active:
-#     print("Hello, welcome to snake avoider!")
-#     rows = input(f"How many rows are in your lawn? (Type 'idk' if you don't know)\n")
-#     columns = input(f"How many columns are in your lawn?\n")
-#     snakes = 0
-#     while snakes == 0:
-#         snakes_temp = input(f"How many snakes are in your lawn? (You know how many, right?)\n")
-#         if 
+game.draw_board()
+game.user_action(f"\nChoose first tile to pounce on. Format: 'row,col'\n", first=True)
+game.draw_board()
+while game.unexposed:
+    tile_message = f"\nInput an action and tile. 'p' to pounce, 'f' to flag, row and col as integers.\nFormat: 'action row,col'\n"
+    game.user_action(tile_message)
+    game.draw_board()
+    if game.lose == True:
+        break
+if game.lose == True:
+    print("You lose! Idiot!")
+else:
+    print("You are winner!")
+    game.reveal_board()
+    game.draw_board()
