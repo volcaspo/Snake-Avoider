@@ -1,18 +1,22 @@
 import random
 
+import block_numbers as bn
+
 class ANSI():
     """Adds colors to strings"""
     green = '\x1B[32m'
     red = '\x1B[31m'
-    lred = '\x1B[38;2;255;200;200m'
-    lorange = '\x1B[38;2;255;208;166m'
-    lyellow = '\x1B[38;2;255;248;181m'
-    lblue = '\x1B[38;2;188;195;255m'
-    lpurple = '\x1B[38;2;220;188;255m'
-    lmagenta = '\x1B[38;2;252;199;255m'
-    lgreen = '\x1B[38;2;192;255;188m'
+    lred = '\x1B[38;2;255;100;100m'
+    lorange = '\x1B[38;2;255;128;0m'
+    yellow = '\x1B[38;2;255;255;0m'
+    lavender = '\x1B[38;2;180;160;255m'
+    lcyan = '\x1B[38;2;0;255;255m'
+    lblue = '\x1B[38;2;51;153;255m'
+    lpurple = '\x1B[38;2;178;102;255m'
+    lmagenta = '\x1B[38;2;255;102;255m'
+    lgreen = '\x1B[38;2;128;255;0m'
     cyan = '\x1B[36m'
-    gray = '\x1B[38;2;150;150;150m'
+    gray = '\x1B[38;2;120;120;120m'
     white = '\x1B[37m'
     end = '\x1B[0m'
 
@@ -23,14 +27,14 @@ symbols = {
     "hidden": ANSI.white+"◇"+ANSI.end,
     "numbers": [
         ANSI.gray+"∙"+ANSI.end,
-        ANSI.lyellow+"1"+ANSI.end,
-        ANSI.lyellow+"2"+ANSI.end,
-        ANSI.lgreen+"3"+ANSI.end,
+        ANSI.yellow+"1"+ANSI.end,
+        ANSI.lorange+"2"+ANSI.end,
+        ANSI.lred+"3"+ANSI.end,
         ANSI.lpurple+"4"+ANSI.end,
         ANSI.lblue+"5"+ANSI.end,
         ANSI.lmagenta+"6"+ANSI.end,
-        ANSI.lorange+"7"+ANSI.end,
-        ANSI.lred+"8"+ANSI.end,
+        ANSI.lcyan+"7"+ANSI.end,
+        ANSI.lgreen+"8"+ANSI.end,
         ],
 }
 
@@ -62,7 +66,15 @@ class Board():
         self.columns = columns
         self.snakes = snakes
         self.lose = False
-        self.quit = False
+
+        #builds a list of block-number styles that are fit for the number of rows
+        styles = []
+        for style in bn.styles:
+            if style[0] <= self.rows+2:
+                styles.append(style)
+        while len(styles) > 2:
+            styles = styles[1:]
+        self.style = random.choice(styles)
 
     def build_tiles(self):
         """Initializes a dictionary of all the tiles on the board with default values"""
@@ -143,14 +155,24 @@ class Board():
             self.tiles_dict[tile]["exposed"] = True
             self.tiles_dict[tile]["flag"] = False
 
-    def draw_board(self):
-        """Creates a string to render the board"""
+    def draw_board(self, first=False):
+        """
+        Creates a string to render the board.
+        Renders the number of unexposed tiles to the right.
+        """
         board_render = f"{symbols['origin']}{spacer(self.rows)}"
-        
+        if first == True:
+            first_offset = self.snakes
+        else:
+            first_offset = 0
+        num_lines = bn.build_number_lines(len(self.unexposed)-first_offset, self.style)
+
         #labels the columns at the top
         for i in range(1, self.columns+1):
             board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
             if i == self.columns:
+                board_render += f"{symbols['origin']}{spacer(self.rows)}"
+                board_render += num_lines[0]
                 board_render += f"\n"
         
         #renders each tile
@@ -172,7 +194,18 @@ class Board():
             board_render += f"{tile_render}{spacer(self.columns)}"
             #indents at the end of each row
             if coords[1] == self.columns:
+                board_render += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
+                if coords[0] < len(num_lines):
+                    board_render += num_lines[coords[0]]
                 board_render += "\n"
+
+        #labels the columns at the bottom
+        board_render += f"{symbols['origin']}{spacer(self.rows)}"
+        for i in range(1, self.columns+1):
+            board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
+            if i == self.columns:
+                board_render += f"{symbols['origin']}{spacer(self.rows)}"
+            
         print()
         print(board_render)
 
@@ -184,11 +217,15 @@ class Board():
             if other == "continue":
                 continue
             elif other == "r":
-                self.lose = "forfeit"
-                self.reveal_board()
+                if first == False:
+                    self.lose = "forfeit"
+                    self.reveal_board()
+                    self.draw_board()
+                elif first == True:
+                    self.lose = "restart"
                 break
             elif other == "q":
-                self.quit = True
+                self.lose = "quit"
                 break
             if first == True:
                 coord = user_input
@@ -226,26 +263,27 @@ class Board():
                 error_message()
                 continue
 
-            if action in ["f", "o", "i", "d"]:
-                if action == "f" or action == "o":
-                    act = "flag" if action == "f" else "ornament"
+            if action in ["f", "p", "o", "d"]:
+                if action == "f" or action == "p":
+                    act = "flag" if action == "f" else "pamper"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
                         print(f"Can't {act} an exposed tile!")
                         continue
                     elif self.tiles_dict[coord_tuple]["exposed"] == False:
                         self.flag_tile(coord_tuple)
                         break
-                if action == "i" or action == "d":
-                    act = "investigate" if action == "i" else "diddle"
+                if action == "o" or action == "d":
+                    act = "occupy" if action == "o" else "diddle"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
                         print(f"Can't {act} on an exposed tile!")
                         continue
                     elif self.tiles_dict[coord_tuple]["flag"] == True:
-                        print(f"Can't {act} on a flagged/ornamented tile!")
+                        print(f"Can't {act} on a flagged/pampered tile!")
                         continue
                     if self.tiles_dict[coord_tuple]["snake"] == True:
                         self.lose = "lose"
                         self.reveal_board()
+                        self.draw_board()
                     elif self.tiles_dict[coord_tuple]["snake"] == False:
                         self.reveal_tile(coord_tuple)
                     break
@@ -254,23 +292,25 @@ class Board():
                 continue
 
     def flag_tile(self, coords):
+        """Toggles 'flag' for a tile."""
         if self.tiles_dict[coords]["flag"] == False:
             self.tiles_dict[coords]["flag"] = True 
         else:
             self.tiles_dict[coords]["flag"] = False
-def get_positive_int(message, amount_type):
-    """Ensures that an input is an integer. Takes 'idk' as a randomizer."""
+
+def get_positive_int(message, amount_type, active=False):
+    """Ensures that an input is an integer within a set range. Takes 'idk' as a randomizer."""
     if amount_type == "rows" or "columns":
-        greater_than = 3
+        min_value = 3
     if amount_type == "snakes":
-        greater_than = 0
+        min_value = 0
         max_value = (area-10)
     while True:
         value = input(message)
-        other = universal_action(value)
+        other = universal_action(value, active)
         if other == 'continue':
             continue
-        if other == 'q':
+        if other == 'q' or other == 'r':
             break
         if value == 'idk':
             if amount_type == "rows" or amount_type == "columns":
@@ -282,10 +322,10 @@ def get_positive_int(message, amount_type):
         try:
             value = int(value)
         except ValueError:
-            print("Must be an integer!!")
+            print("Must be an integer!")
         else:
-            if value <= greater_than:
-                print(f"Must be greater than {greater_than}!!!!")
+            if value <= min_value:
+                print(f"Must be greater than {min_value}!")
             elif amount_type == "snakes":
                 if value > max_value:
                     print(f"Must leave at least 10 open spaces! At most, {max_value}!!!")
@@ -296,6 +336,7 @@ def get_positive_int(message, amount_type):
     return value
 
 def get_text_input(question, options):
+    """Prompts user for inputs until an available option is chosen."""
     while True:
         user_input = input(question)
         if user_input in options:
@@ -312,18 +353,19 @@ def get_text_input(question, options):
 
 
 def universal_action(input, active=False):
+    """Processes inputs to check for actions that can be entered at any time."""
     if input == 'i':
         print("""
         You are looking to diddle on your grid-shaped lawn, but there are snakes.
         If you diddle on the home of a snake, you will be eaten alive in one big gulp.
         Luckily, your lawn has numbers to indicate the presence of adjacent snakes.
-        You will not be satisfied until you have diddled or investigated on every snake-free tile.
+        You will not be satisfied until you have diddled or occupied every snake-free tile.
         """)
         return "continue"
     if input == 'f':
         print("""
-        For your action, you can either investigate/diddle a tile or you can flag/ornament a tile.
-        These each have a corresponding letters: 'i', 'd', 'f', 'o'.
+        For your action, you can either occupy/diddle a tile or you can flag/pamper a tile.
+        These each have a corresponding letters: 'o', 'd', 'f', 'p'.
         If you are on your first turn, you don't need an action.
 
         For your coordinates, you must input a row and then a column as integers.
@@ -348,9 +390,9 @@ modes = {
     "easy": [9, 9, 10],
     "medium": [16, 16, 40],
     "hard": [30, 16, 99],
-    "extreme": [40, 40, 400],
+    "extreme": [35, 25, 210],
     "impossible": [100, 100, 9990],
-    "instant win": [9, 9, 1],
+    "snake": [9, 9, 1],
 }
 
 
@@ -359,62 +401,73 @@ print(f"""
 Hello, welcome to {ANSI.green}Snake{ANSI.end} {ANSI.red}Avoider{ANSI.end}!
 
 At any time, input 'i' for instructions, 'f' for formatting info,
-'r' to restart, or 'q' to quit""")
+'r' to restart/forfeit, or 'q' to quit""")
 
 same = False
-quit = False
 while True:
     if same == False:
-        mode = get_text_input(f"\nHow difficult is your lawn to traverse? Options:\n"
-            f"'easy'   'medium'   'hard'   'extreme'   'impossible'   'instant win'   'custom'\n",
+        mode = get_text_input(f"\n{ANSI.end}How difficult is your lawn to traverse? Options:\n"
+            f"'easy'   'medium'   'hard'   'extreme'   'impossible'   'snake'   'custom'\n{ANSI.lavender}",
             list(modes.keys()))
         if mode == 'custom':
-            rows = get_positive_int(f"\nHow many rows are in your lawn? (Type 'idk' if you don't know)\n", "rows")
-            if rows == "q":
+            rows = get_positive_int(f"{ANSI.end}\nHow many rows are in your lawn? (Type 'idk' if you don't know)\n{ANSI.lavender}", "rows", active=True)
+            if rows == 'q':
                 break
-            columns = get_positive_int(f"\nHow many columns are in your lawn? (Type 'idk' if you don't know)\n", "columns")
+            elif rows == 'r':
+                continue
+            columns = get_positive_int(f"{ANSI.end}\nHow many columns are in your lawn? (Type 'idk' if you don't know)\n{ANSI.lavender}", "columns", active=True)
             area = rows*columns
-            if columns == "q":
+            if columns == 'q':
                 break
-            snakes = get_positive_int(f"\nHow many snakes are in your lawn? (Type 'idk' if you don't know)\n", "snakes")
-            if snakes == "q":
+            elif columns == 'r':
+                continue
+            snakes = get_positive_int(f"{ANSI.end}\nHow many snakes are in your lawn? (Type 'idk' if you don't know)\n{ANSI.lavender}", "snakes", active=True)
+            if snakes == 'q':
                 break
+            elif snakes == 'r':
+                continue
         elif mode == 'q':
             break
         else:
             rows = modes[mode][0]
             columns = modes[mode][1]
             snakes = modes[mode][2]
+
     game = Board(rows, columns, snakes)
     game.build_tiles()
-    game.draw_board()
-    game.user_action(f"\nChoose first tile to diddle on. Input coordinates:\n", first=True)
-    if game.lose == False:
+    game.draw_board(first=True)
+    game.user_action(f"{ANSI.end}\nChoose first tile to diddle on. Input coordinates:\n{ANSI.lavender}", first=True)
+
+    if game.lose == False and game.unexposed:
         game.draw_board()
+
+        # Action loop
         while game.unexposed:
-            tile_message = f"\nInput action and coordinates:\n"
+            tile_message = f"{ANSI.end}\nInput action and coordinates:\n{ANSI.lavender}"
             game.user_action(tile_message)
-            if game.quit == True:
+            if game.lose != False or game.unexposed == False:
                 break
             game.draw_board()
-            if game.lose != False:
-                break
-    if game.quit == True:
+
+    # Game endings
+    if game.lose == "quit":
         break
+    elif game.lose == "restart":
+        continue
     elif game.lose == "lose":
-        print(f"You lose! {ANSI.red}FAIL!!{ANSI.end}")
+        print(f"{ANSI.end}You lose! {ANSI.red}FAIL!!{ANSI.end}")
     elif game.lose == "forfeit":
-        print(f"You gave up! {ANSI.red}Nooooo!{ANSI.end}")
+        print(f"{ANSI.end}You gave up! {ANSI.red}Nooooo!{ANSI.end}")
     else:
         game.reveal_board()
         game.draw_board()
-        print(f"You are winner! {ANSI.green}Champion!!!{ANSI.end}")
-    again = get_text_input(f"Type 's' to play again with the same settings,\n"
-        "or type 'd' to play with different settings.\n", ['s','d'])
+        print(f"{ANSI.end}You are winner! {ANSI.green}Champion!!!{ANSI.end}")
+    again = get_text_input(f"{ANSI.end}Type 's' to play again with the same settings,\n"
+        f"or type 'd' to play with different settings.\n{ANSI.lavender}", ['s','d'])
     if again == 'q':
-        quit = True
         break
     if again == 's':
         same = True
     if again == 'd':
         same = False
+print(f"{ANSI.end}")
