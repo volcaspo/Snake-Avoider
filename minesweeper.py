@@ -59,6 +59,12 @@ def spacer(max_number, current_number=1):
 def error_message():
     print("Coords don't exist, or formatting is unclear. Type 'f' for formatting info.")
 
+sizes = {
+    "small": 4,
+    "medium": 13,
+    "large": 22,
+}
+
 class Board():
     """Represents the board containing the tiles"""
     def __init__(self, rows, columns, snakes):
@@ -69,11 +75,12 @@ class Board():
 
         #builds a list of block-number styles that are fit for the number of rows
         styles = []
+        for size, measure in sizes.items():
+            if self.rows >= measure:
+                self.size = size
         for style in bn.styles:
-            if style[0] <= self.rows+2:
+            if style[0][1] == self.size and style[0][0] <= self.rows+2:
                 styles.append(style)
-        while len(styles) > 2:
-            styles = styles[1:]
         self.style = random.choice(styles)
 
     def build_tiles(self):
@@ -121,7 +128,7 @@ class Board():
                 if tile in self.tiles_list:
                     self.tiles_dict[tile]["number"] += 1
 
-    def reveal_tile(self, coords):
+    def reveal_tile(self, coords, satisfied=False):
         """
         Reveals selected tile, and reveals surroundings if the tile is a 0.
         Chains the revealing of 0-tiles.
@@ -135,7 +142,7 @@ class Board():
             pass
         while to_reveal_surroundings:
             center_tile = to_reveal_surroundings.pop()
-            if self.tiles_dict[coords]["number"] == 0:
+            if self.tiles_dict[coords]["number"] == 0 or satisfied == True:
                 for adjacent in adjacencies:
                     tile = ((center_tile[0]+adjacent[0]), (center_tile[1]+adjacent[1]))
                     if tile in self.tiles_list:
@@ -155,6 +162,27 @@ class Board():
             self.tiles_dict[tile]["exposed"] = True
             self.tiles_dict[tile]["flag"] = False
 
+    def check_satisfaction(self, check_tile):
+        """Checks whether a tile has enough flags around it to equal its number."""
+        number = 0
+        snake = False
+        for adjacent in adjacencies:
+            tile = ((check_tile[0]+adjacent[0]), (check_tile[1]+adjacent[1]))
+            if tile in self.tiles_list:
+                if self.tiles_dict[tile]["flag"] == True:
+                    number += 1
+                else:
+                    if self.tiles_dict[tile]["snake"] == True:
+                        snake = True
+        if number == self.tiles_dict[check_tile]["number"]:
+            if snake == True:
+                return "snake"
+            else:
+                return "satisfied"
+        else:
+            return "unsatisfied"
+        
+
     def draw_board(self, first=False):
         """
         Creates a string to render the board.
@@ -172,7 +200,7 @@ class Board():
             board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
             if i == self.columns:
                 board_render += f"{symbols['origin']}{spacer(self.rows)}"
-                board_render += num_lines[0]
+                board_render += " "+num_lines[0]
                 board_render += f"\n"
         
         #renders each tile
@@ -192,11 +220,11 @@ class Board():
             else:
                 tile_render = symbols["hidden"]
             board_render += f"{tile_render}{spacer(self.columns)}"
-            #indents at the end of each row
+            #makes new line at the end of each row
             if coords[1] == self.columns:
                 board_render += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
                 if coords[0] < len(num_lines):
-                    board_render += num_lines[coords[0]]
+                    board_render += " "+num_lines[coords[0]]
                 board_render += "\n"
 
         #labels the columns at the bottom
@@ -205,7 +233,9 @@ class Board():
             board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
             if i == self.columns:
                 board_render += f"{symbols['origin']}{spacer(self.rows)}"
-            
+        if self.rows == len(num_lines)-2:
+            board_render += " "+num_lines[self.rows]
+
         print()
         print(board_render)
 
@@ -229,12 +259,19 @@ class Board():
                 break
             if first == True:
                 coord = user_input
+                action = ''
             else:
-                action = user_input[0]
                 try:
-                    coord = user_input[1:]
-                except IndexError:
-                    error_message()
+                    int_check = int(user_input[0])
+                except:
+                    action = user_input[0]
+                    try:
+                        coord = user_input[1:]
+                    except IndexError:
+                        error_message()
+                else:
+                    coord = user_input
+                    action = "d"
             if " " in coord:
                 coord = coord.strip(" ")
                 if " " in coord:
@@ -259,11 +296,12 @@ class Board():
                     self.set_numbers()
                     self.reveal_tile(coord_tuple)
                     break
+
             else:
                 error_message()
                 continue
 
-            if action in ["f", "p", "o", "d"]:
+            if action in ["f", "p", "o", "d"] or type(user_input[0]) is int:
                 if action == "f" or action == "p":
                     act = "flag" if action == "f" else "pamper"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
@@ -272,11 +310,19 @@ class Board():
                     elif self.tiles_dict[coord_tuple]["exposed"] == False:
                         self.flag_tile(coord_tuple)
                         break
-                if action == "o" or action == "d":
+                if action == "o" or action == "d" or type(user_input[0]) is int:
                     act = "occupy" if action == "o" else "diddle"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
-                        print(f"Can't {act} on an exposed tile!")
-                        continue
+                        satisfied = self.check_satisfaction(coord_tuple)
+                        if satisfied == "satisfied":
+                            self.reveal_tile(coord_tuple, satisfied=True)
+                        elif satisfied == "unsatisfied":
+                            print(f"Can't expose all the surroundings of an unsatisfied tile!")
+                            continue
+                        elif satisfied == "snake":
+                            self.lose = "lose"
+                            self.reveal_board()
+                            self.draw_board()
                     elif self.tiles_dict[coord_tuple]["flag"] == True:
                         print(f"Can't {act} on a flagged/pampered tile!")
                         continue
@@ -367,13 +413,29 @@ def universal_action(input, active=False):
         For your action, you can either occupy/diddle a tile or you can flag/pamper a tile.
         These each have a corresponding letters: 'o', 'd', 'f', 'p'.
         If you are on your first turn, you don't need an action.
+        If you don't type in an action, your action will by default be diddle.
 
         For your coordinates, you must input a row and then a column as integers.
         The action and the coordinates can either be separated by a space or a comma.
         Pro tip: the action does not need to be separated from the coordinates.
 
-        Examples:
-        'p 1,2'   'f5 9'   'o,3,4'   'd 15 3'   'f,6 14'
+        Examples of acceptable formatting:
+        'p 1,2'   'f5 9'   'o,3,4'   'd 15 3'   'f,6 14'   '4 11'
+        """)
+        return "continue"
+    if input == "b":
+        print("""
+        You win if you expose every non-snake tile.
+        You lose if you expose a snake tile.
+        You can expose tiles by diddling on/occupying them.
+        You can flag/pamper tiles that you think are snakes.
+        You can unflag tiles that are flagged.
+        You can't expose a tile that is flagged/pampered.
+
+        Each tile has a number representing the quantity of adjacent snakes.
+        Tiles are adjacent if they are in adjacent rows or columns, including diagonals.
+        By diddling/occupying an exposed and satisfied tile, you can expose all its adjacent unflagged tiles.
+        A tile is satisfied if the number on the tile equals the number of surrounding flags.
         """)
         return "continue"
     if input == "r":
@@ -400,8 +462,8 @@ modes = {
 print(f"""
 Hello, welcome to {ANSI.green}Snake{ANSI.end} {ANSI.red}Avoider{ANSI.end}!
 
-At any time, input 'i' for instructions, 'f' for formatting info,
-'r' to restart/forfeit, or 'q' to quit""")
+At any time, input 'i' for instructions, 'b' for rulebook,
+'f' for formatting info, 'r' to restart/forfeit, or 'q' to quit""")
 
 same = False
 while True:
@@ -445,7 +507,7 @@ while True:
         while game.unexposed:
             tile_message = f"{ANSI.end}\nInput action and coordinates:\n{ANSI.lavender}"
             game.user_action(tile_message)
-            if game.lose != False or game.unexposed == False:
+            if game.lose != False or not game.unexposed:
                 break
             game.draw_board()
 
