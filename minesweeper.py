@@ -19,6 +19,7 @@ class ANSI():
     gray = '\x1B[38;2;120;120;120m'
     white = '\x1B[37m'
     end = '\x1B[0m'
+    bred = '\x1B[41m'
 
 symbols = {
     "origin": ANSI.cyan+"☺"+ANSI.end,
@@ -106,8 +107,8 @@ class Board():
         temp_tiles_list = self.tiles_list[:]
         temp_tiles_list.remove(starting_tile)
         self.unexposed.remove(starting_tile)
-        for adjacent in adjacencies:
-            tile = ((starting_tile[0]+adjacent[0]), (starting_tile[1]+adjacent[1]))
+        adjacent_tiles = self.build_adjacencies(starting_tile)
+        for tile in adjacent_tiles:
             if tile in self.tiles_list:
                 temp_tiles_list.remove(tile)
                 self.unexposed.remove(tile)
@@ -121,12 +122,29 @@ class Board():
         """
         Only use after snakes have been set.
         Adds 1 to the number of every tile surrounding every snake.
+        Or, if there are more snakes than number tiles,
+        adds 1 to every number tile for each surrounding snake.
         """
-        for snake_tile in self.snake_tiles:
-            for adjacent in adjacencies:
-                tile = ((snake_tile[0]+adjacent[0]), (snake_tile[1]+adjacent[1]))
-                if tile in self.tiles_list:
+        if self.snakes <= len(self.unexposed):
+            for snake_tile in self.snake_tiles:
+                adjacent_tiles = self.build_adjacencies(snake_tile)
+                for tile in adjacent_tiles:
                     self.tiles_dict[tile]["number"] += 1
+        else:
+            for number_tile in self.unexposed:
+                adjacent_tiles = self.build_adjacencies(number_tile)
+                for tile in adjacent_tiles:
+                    if self.tiles_dict[tile]["snake"] == True:
+                        self.tiles_dict[number_tile]["number"] += 1
+
+    def build_adjacencies(self, center_tile):
+        adjacent_tiles = []
+        for adjacent in adjacencies:
+            tile = ((center_tile[0]+adjacent[0]), (center_tile[1]+adjacent[1]))
+            if tile in self.tiles_list:
+                adjacent_tiles.append(tile)
+        return adjacent_tiles
+
 
     def reveal_tile(self, coords, satisfied=False):
         """
@@ -143,37 +161,37 @@ class Board():
         while to_reveal_surroundings:
             center_tile = to_reveal_surroundings.pop()
             if self.tiles_dict[coords]["number"] == 0 or satisfied == True:
-                for adjacent in adjacencies:
-                    tile = ((center_tile[0]+adjacent[0]), (center_tile[1]+adjacent[1]))
-                    if tile in self.tiles_list:
-                        if self.tiles_dict[tile]["exposed"] is False:
-                            if self.tiles_dict[tile]["snake"] is False:
-                                self.tiles_dict[tile]["exposed"] = True
-                                try:
-                                    self.unexposed.remove(tile)
-                                except ValueError:
-                                    pass
-                                if self.tiles_dict[tile]["number"] == 0:
-                                    to_reveal_surroundings.append(tile)
+                adjacent_tiles = self.build_adjacencies(center_tile)
+                for tile in adjacent_tiles:
+                    if self.tiles_dict[tile]["exposed"] is False:
+                        if self.tiles_dict[tile]["snake"] is False:
+                            self.tiles_dict[tile]["exposed"] = True
+                            try:
+                                self.unexposed.remove(tile)
+                            except ValueError:
+                                pass
+                            if self.tiles_dict[tile]["number"] == 0:
+                                to_reveal_surroundings.append(tile)
 
     def reveal_board(self):
         """Reveals the entire board upon the game ending."""
         for tile in self.tiles_list:
             self.tiles_dict[tile]["exposed"] = True
+            if self.tiles_dict[tile]["flag"] == False and self.tiles_dict[tile]["snake"] == True and self.lose != False:
+                self.tiles_dict[tile]["snake"] = "missed"
             self.tiles_dict[tile]["flag"] = False
 
     def check_satisfaction(self, check_tile):
         """Checks whether a tile has enough flags around it to equal its number."""
         number = 0
         snake = False
-        for adjacent in adjacencies:
-            tile = ((check_tile[0]+adjacent[0]), (check_tile[1]+adjacent[1]))
-            if tile in self.tiles_list:
-                if self.tiles_dict[tile]["flag"] == True:
-                    number += 1
-                else:
-                    if self.tiles_dict[tile]["snake"] == True:
-                        snake = True
+        adjacent_tiles = self.build_adjacencies(check_tile)
+        for tile in adjacent_tiles:
+            if self.tiles_dict[tile]["flag"] == True:
+                number += 1
+            else:
+                if self.tiles_dict[tile]["snake"] == True:
+                    snake = True
         if number == self.tiles_dict[check_tile]["number"]:
             if snake == True:
                 return "snake"
@@ -215,6 +233,8 @@ class Board():
             elif data["exposed"] == True:
                 if data["snake"] == True:
                     tile_render = symbols["snake"]
+                elif data["snake"] == "missed":
+                    tile_render = ANSI.bred+symbols["snake"]
                 else:
                     tile_render = symbols["numbers"][(data["number"])]
             else:
@@ -305,8 +325,11 @@ class Board():
                 if action == "f" or action == "p":
                     act = "flag" if action == "f" else "pamper"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
-                        print(f"Can't {act} an exposed tile!")
-                        continue
+                        if self.flag_surroundings(coord_tuple):
+                            print(f"This tile has no surroundings to {act}!")
+                            continue
+                        else:
+                            break
                     elif self.tiles_dict[coord_tuple]["exposed"] == False:
                         self.flag_tile(coord_tuple)
                         break
@@ -343,6 +366,33 @@ class Board():
             self.tiles_dict[coords]["flag"] = True 
         else:
             self.tiles_dict[coords]["flag"] = False
+
+    def flag_surroundings(self, coords):
+        """
+        Toggles 'flag' for all the surroundings of a tile.
+        Only unflags if all the surroundings are flagged.
+        Returns a value only if it fails.
+        """
+        unexposed = 0
+        flagged = 0
+        adjacent_tiles = self.build_adjacencies(coords)
+        for tile in adjacent_tiles:
+            if self.tiles_dict[tile]["exposed"] == False:
+                unexposed += 1
+                if self.tiles_dict[tile]["flag"] == True:
+                    flagged += 1
+        if unexposed == 0:
+            return "fail"
+        elif flagged == unexposed:
+            for tile in adjacent_tiles:
+                if self.tiles_dict[tile]["exposed"] == False:
+                    self.tiles_dict[tile]["flag"] = False
+        else:
+            for tile in adjacent_tiles:
+                if self.tiles_dict[tile]["exposed"] == False:
+                    self.tiles_dict[tile]["flag"] = True
+            
+
 
 def get_positive_int(message, amount_type, active=False):
     """Ensures that an input is an integer within a set range. Takes 'idk' as a randomizer."""
@@ -434,8 +484,11 @@ def universal_action(input, active=False):
 
         Each tile has a number representing the quantity of adjacent snakes.
         Tiles are adjacent if they are in adjacent rows or columns, including diagonals.
+
+        ADVANCED RULES FOR SPEEDY GAMEPLAY:
         By diddling/occupying an exposed and satisfied tile, you can expose all its adjacent unflagged tiles.
         A tile is satisfied if the number on the tile equals the number of surrounding flags.
+        By flagging/pampering an exposed tile, you can flag or unflag all of its surroundings.
         """)
         return "continue"
     if input == "r":
@@ -517,13 +570,13 @@ while True:
     elif game.lose == "restart":
         continue
     elif game.lose == "lose":
-        print(f"{ANSI.end}You lose! {ANSI.red}FAIL!!{ANSI.end}")
+        print(f"\n{ANSI.end}You lose! {ANSI.red}FAIL!!{ANSI.end}")
     elif game.lose == "forfeit":
-        print(f"{ANSI.end}You gave up! {ANSI.red}Nooooo!{ANSI.end}")
+        print(f"\n{ANSI.end}You gave up! {ANSI.red}Nooooo!{ANSI.end}")
     else:
         game.reveal_board()
         game.draw_board()
-        print(f"{ANSI.end}You are winner! {ANSI.green}Champion!!!{ANSI.end}")
+        print(f"\n{ANSI.end}You are winner! {ANSI.green}Champion!!!{ANSI.end}")
     again = get_text_input(f"{ANSI.end}Type 's' to play again with the same settings,\n"
         f"or type 'd' to play with different settings.\n{ANSI.lavender}", ['s','d'])
     if again == 'q':
