@@ -1,4 +1,5 @@
 import random
+import datetime
 
 import block_numbers as bn
 
@@ -13,29 +14,33 @@ class ANSI():
     lcyan = '\x1B[38;2;0;255;255m'
     lblue = '\x1B[38;2;51;153;255m'
     lpurple = '\x1B[38;2;178;102;255m'
-    lmagenta = '\x1B[38;2;255;102;255m'
-    lgreen = '\x1B[38;2;128;255;0m'
+    lpink = '\x1B[38;2;255;153;204m'
+    lmagenta = '\x1B[38;2;255;140;210m'
+    lime = '\x1B[38;2;128;255;0m'
+    lgreen = '\x1B[38;2;0;255;128m'
     cyan = '\x1B[36m'
     gray = '\x1B[38;2;120;120;120m'
     white = '\x1B[37m'
     end = '\x1B[0m'
     bred = '\x1B[41m'
+    bnavy = '\x1B[48;2;0;51;102m'
 
 symbols = {
     "origin": ANSI.cyan+"☺"+ANSI.end,
-    "flag": ANSI.red+"▹"+ANSI.end,
-    "snake": ANSI.green+"S"+ANSI.end,
-    "hidden": ANSI.white+"◇"+ANSI.end,
+    "flag": ANSI.red+"▹",
+    "snake": ANSI.green+"S",
+    "red snake": ANSI.green+ANSI.bred+"S",
+    "hidden": ANSI.white+"◇",
     "numbers": [
-        ANSI.gray+"∙"+ANSI.end,
-        ANSI.yellow+"1"+ANSI.end,
-        ANSI.lorange+"2"+ANSI.end,
-        ANSI.lred+"3"+ANSI.end,
-        ANSI.lpurple+"4"+ANSI.end,
-        ANSI.lblue+"5"+ANSI.end,
-        ANSI.lmagenta+"6"+ANSI.end,
-        ANSI.lcyan+"7"+ANSI.end,
-        ANSI.lgreen+"8"+ANSI.end,
+        ANSI.gray+"∙",
+        ANSI.yellow+"1",
+        ANSI.lorange+"2",
+        ANSI.lred+"3",
+        ANSI.lpurple+"4",
+        ANSI.lmagenta+"5",
+        ANSI.lcyan+"6",
+        ANSI.lime+"7",
+        ANSI.lgreen+"8",
         ],
 }
 
@@ -50,15 +55,25 @@ adjacencies = [
     (1, 1),
 ]
 
-def spacer(max_number, current_number=1):
+def spacer(max_number, current_number=1, background=None):
     """
     Creates a string with an appropriate length of spaces based on the length of key numbers.
     Used for keeping spacing consistent when rending the board.
+    Allows adding backgrounds to the beginning or end of the string for placing divider lines.
     """
-    return " "*(1 + len(str(max_number))-len(str(current_number)))
+
+
+    if background == "end":
+        spacer = " "*(len(str(max_number))-len(str(current_number))) + f"{ANSI.bnavy} {ANSI.end}"
+    elif background == "start":
+        spacer = f"{ANSI.bnavy} {ANSI.end}" + " "*(len(str(max_number))-len(str(current_number)))
+    else:
+        spacer = " "*(1 + len(str(max_number))-len(str(current_number)))
+    return spacer
+    
 
 def error_message():
-    print("Coords don't exist, or formatting is unclear. Type 'f' for formatting info.")
+    print(f"{ANSI.red}Coords don't exist, or formatting is unclear. Type 'f' for formatting info.{ANSI.lavender}")
 
 sizes = {
     "small": 4,
@@ -108,6 +123,7 @@ class Board():
         temp_tiles_list.remove(starting_tile)
         self.unexposed.remove(starting_tile)
         adjacent_tiles = self.build_adjacencies(starting_tile)
+        self.starting_tile_adjacents = adjacent_tiles
         for tile in adjacent_tiles:
             if tile in self.tiles_list:
                 temp_tiles_list.remove(tile)
@@ -131,7 +147,7 @@ class Board():
                 for tile in adjacent_tiles:
                     self.tiles_dict[tile]["number"] += 1
         else:
-            for number_tile in self.unexposed:
+            for number_tile in (self.starting_tile_adjacents+self.unexposed):
                 adjacent_tiles = self.build_adjacencies(number_tile)
                 for tile in adjacent_tiles:
                     if self.tiles_dict[tile]["snake"] == True:
@@ -206,27 +222,36 @@ class Board():
         Creates a string to render the board.
         Renders the number of unexposed tiles to the right.
         """
-        board_render = f"{symbols['origin']}{spacer(self.rows)}"
+        # Adjusts counter to be accurate for first turn
         if first == True:
             first_offset = self.snakes
         else:
             first_offset = 0
         num_lines = bn.build_number_lines(len(self.unexposed)-first_offset, self.style)
 
+        print()
         #labels the columns at the top
+        horizontal_axis = f"{symbols['origin']}{spacer(self.rows)}"
         for i in range(1, self.columns+1):
-            board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
-            if i == self.columns:
-                board_render += f"{symbols['origin']}{spacer(self.rows)}"
-                board_render += " "+num_lines[0]
-                board_render += f"\n"
-        
+            axis_spacer = spacer(self.columns, i)
+            if i % 10 == 0:
+                horizontal_axis += ANSI.cyan+ANSI.bnavy+f"{i}{ANSI.end}{axis_spacer}"
+            elif i % 10 == 9 and self.columns % 10 != 9:
+                horizontal_axis += ANSI.cyan+f"{i}{ANSI.end}{spacer(self.columns, i, background='end')}"
+            else:
+                horizontal_axis += ANSI.cyan+f"{i}{axis_spacer}"+ANSI.end
+        print(horizontal_axis + f"{symbols['origin']}{spacer(self.rows)} {num_lines[0]}")
         #renders each tile
+        line = ""
         for coords, data in self.tiles_dict.items():
             #labels the row at the start of each row
             if coords[1] == 1:
-                board_render += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
+                if coords[0] % 10 == 0:
+                    line += ANSI.cyan+ANSI.bnavy+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
+                else:
+                    line += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
 
+            #selects the appropriate symbol for a tile
             tile_render = ""
             if data["flag"] == True:
                 tile_render = symbols["flag"]
@@ -234,30 +259,39 @@ class Board():
                 if data["snake"] == True:
                     tile_render = symbols["snake"]
                 elif data["snake"] == "missed":
-                    tile_render = ANSI.bred+symbols["snake"]
+                    tile_render = symbols["red snake"]
                 else:
                     tile_render = symbols["numbers"][(data["number"])]
             else:
                 tile_render = symbols["hidden"]
-            board_render += f"{tile_render}{spacer(self.columns)}"
-            #makes new line at the end of each row
+            
+            # Variations for placing backgrounds for spacers
+            if coords[0] % 10 == 0:
+                line += ANSI.bnavy+f"{tile_render}{ANSI.bnavy}{spacer(self.columns)}"+ANSI.end
+            elif coords[1] % 10 == 0:
+                line += ANSI.bnavy+f"{tile_render}{ANSI.end}{spacer(self.columns, background='start')}"
+            elif coords[1] % 10 == 9 and self.columns % 10 != 9:
+                line += f"{tile_render}{ANSI.end}{spacer(self.columns, background='end')}"
+            else:
+                line += f"{tile_render}{ANSI.end}{spacer(self.columns)}"
+            # Labels row and makes new line at the end of each row
             if coords[1] == self.columns:
-                board_render += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
+                if coords[0] % 10 == 0:
+                    line += ANSI.cyan+ANSI.bnavy+f"{coords[0]}{ANSI.end}{spacer(self.rows, coords[0])}"
+                else:
+                    line += ANSI.cyan+f"{coords[0]}{spacer(self.rows, coords[0])}"+ANSI.end
                 if coords[0] < len(num_lines):
-                    board_render += " "+num_lines[coords[0]]
-                board_render += "\n"
+                    line += " "+num_lines[coords[0]]
+                print(line)
+                line = ""
 
         #labels the columns at the bottom
-        board_render += f"{symbols['origin']}{spacer(self.rows)}"
-        for i in range(1, self.columns+1):
-            board_render += ANSI.cyan+f"{i}{spacer(self.columns, i)}"+ANSI.end
-            if i == self.columns:
-                board_render += f"{symbols['origin']}{spacer(self.rows)}"
+        line += horizontal_axis + f"{symbols['origin']}{spacer(self.rows)}"
+        
+        #renders last line of block number if needed
         if self.rows == len(num_lines)-2:
-            board_render += " "+num_lines[self.rows]
-
-        print()
-        print(board_render)
+            line += " "+num_lines[self.rows]
+        print(line)
 
     def user_action(self, message, first=False):
         """Performs an action based on user input."""
@@ -326,7 +360,7 @@ class Board():
                     act = "flag" if action == "f" else "pamper"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
                         if self.flag_surroundings(coord_tuple):
-                            print(f"This tile has no surroundings to {act}!")
+                            print(f"{ANSI.red}This tile has no surroundings to {act}!{ANSI.lavender}")
                             continue
                         else:
                             break
@@ -336,18 +370,21 @@ class Board():
                 if action == "o" or action == "d" or type(user_input[0]) is int:
                     act = "occupy" if action == "o" else "diddle"
                     if self.tiles_dict[coord_tuple]["exposed"] == True:
+                        if self.tiles_dict[coord_tuple]["number"] == 0:
+                            print(f"{ANSI.red}Tile has no surroundings to expose!{ANSI.lavender}")
+                            continue
                         satisfied = self.check_satisfaction(coord_tuple)
                         if satisfied == "satisfied":
                             self.reveal_tile(coord_tuple, satisfied=True)
                         elif satisfied == "unsatisfied":
-                            print(f"Can't expose all the surroundings of an unsatisfied tile!")
+                            print(f"{ANSI.red}Can't expose all the surroundings of an unsatisfied tile!{ANSI.lavender}")
                             continue
                         elif satisfied == "snake":
                             self.lose = "lose"
                             self.reveal_board()
                             self.draw_board()
                     elif self.tiles_dict[coord_tuple]["flag"] == True:
-                        print(f"Can't {act} on a flagged/pampered tile!")
+                        print(f"{ANSI.red}Can't {act} on a flagged/pampered tile!{ANSI.lavender}")
                         continue
                     if self.tiles_dict[coord_tuple]["snake"] == True:
                         self.lose = "lose"
@@ -418,13 +455,13 @@ def get_positive_int(message, amount_type, active=False):
         try:
             value = int(value)
         except ValueError:
-            print("Must be an integer!")
+            print(f"{ANSI.red}Must be an integer!{ANSI.lavender}")
         else:
             if value <= min_value:
-                print(f"Must be greater than {min_value}!")
+                print(f"{ANSI.red}Must be greater than {min_value}!{ANSI.lavender}")
             elif amount_type == "snakes":
                 if value > max_value:
-                    print(f"Must leave at least 10 open spaces! At most, {max_value}!!!")
+                    print(f"{ANSI.red}Must leave at least 10 open spaces! At most, {max_value}!!!{ANSI.lavender}")
                 else:
                     break
             else:
@@ -444,7 +481,7 @@ def get_text_input(question, options):
             elif other == "q":
                 break
             else:
-                print("Action not recognized. Try again.")
+                print(f"{ANSI.red}Action not recognized. Try again.{ANSI.lavender}")
     return user_input
 
 
@@ -493,7 +530,7 @@ def universal_action(input, active=False):
         return "continue"
     if input == "r":
         if active == False:
-            print("There is no game to forfeit!")
+            print(f"{ANSI.red}There is no game to forfeit!{ANSI.lavender}")
             return "continue"
         elif active == True:
             return input
@@ -506,7 +543,7 @@ modes = {
     "medium": [16, 16, 40],
     "hard": [30, 16, 99],
     "extreme": [35, 25, 210],
-    "impossible": [100, 100, 9990],
+    "help": [40, 40, 1590],
     "snake": [9, 9, 1],
 }
 
@@ -522,7 +559,7 @@ same = False
 while True:
     if same == False:
         mode = get_text_input(f"\n{ANSI.end}How difficult is your lawn to traverse? Options:\n"
-            f"'easy'   'medium'   'hard'   'extreme'   'impossible'   'snake'   'custom'\n{ANSI.lavender}",
+            f"'easy'   'medium'   'hard'   'extreme'   'help'   'snake'   'custom'\n{ANSI.lavender}",
             list(modes.keys()))
         if mode == 'custom':
             rows = get_positive_int(f"{ANSI.end}\nHow many rows are in your lawn? (Type 'idk' if you don't know)\n{ANSI.lavender}", "rows", active=True)
@@ -552,6 +589,7 @@ while True:
     game.build_tiles()
     game.draw_board(first=True)
     game.user_action(f"{ANSI.end}\nChoose first tile to diddle on. Input coordinates:\n{ANSI.lavender}", first=True)
+    start_time = datetime.datetime.now()
 
     if game.lose == False and game.unexposed:
         game.draw_board()
@@ -577,8 +615,11 @@ while True:
         game.reveal_board()
         game.draw_board()
         print(f"\n{ANSI.end}You are winner! {ANSI.green}Champion!!!{ANSI.end}")
-    again = get_text_input(f"{ANSI.end}Type 's' to play again with the same settings,\n"
-        f"or type 'd' to play with different settings.\n{ANSI.lavender}", ['s','d'])
+    end_time = datetime.datetime.now()
+    duration = end_time - start_time
+    print("Game duration: "+str(duration))
+    again = get_text_input(f"{ANSI.end}\nInput 's' to play again with the same settings,\n"
+        f"or input 'd' to play with different settings.\n{ANSI.lavender}", ['s','d'])
     if again == 'q':
         break
     if again == 's':
