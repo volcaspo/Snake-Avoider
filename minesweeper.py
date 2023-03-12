@@ -339,7 +339,10 @@ class Board():
                 continue
 
             try:
-                coord_tuple = (int(coord_list[0]), int(coord_list[1]))
+                if Settings.format_first == "row":
+                    coord_tuple = (int(coord_list[0]), int(coord_list[1]))
+                elif Settings.format_first == "column":
+                    coord_tuple = (int(coord_list[1]), int(coord_list[0]))
             except:
                 error_message()
                 continue
@@ -487,7 +490,7 @@ def get_text_input(question, options):
 
 def universal_action(input, active=False):
     """Processes inputs to check for actions that can be entered at any time."""
-    if input == 'i':
+    if input == 'l':
         print("""
         You are looking to diddle on your grid-shaped lawn, but there are snakes.
         If you diddle on the home of a snake, you will be eaten alive in one big gulp.
@@ -502,7 +505,8 @@ def universal_action(input, active=False):
         If you are on your first turn, you don't need an action.
         If you don't type in an action, your action will by default be diddle.
 
-        For your coordinates, you must input a row and then a column as integers.
+        For your coordinates, you must input a column and then a row as integers,
+        unless you toggled the setting to switch to inputting a row first.
         The action and the coordinates can either be separated by a space or a comma.
         Pro tip: the action does not need to be separated from the coordinates.
 
@@ -528,6 +532,14 @@ def universal_action(input, active=False):
         By flagging/pampering an exposed tile, you can flag or unflag all of its surroundings.
         """)
         return "continue"
+    if input == "t":
+        if Settings.format_first == "column":
+            Settings.format_first = "row"
+            print(f"{ANSI.red}Formatting switch to 'row,column'.")
+        elif Settings.format_first == "row":
+            Settings.format_first = "column"
+            print(f"{ANSI.red}Formatting switch to 'column,row'.")
+        return "continue"
     if input == "r":
         if active == False:
             print(f"{ANSI.red}There is no game to forfeit!{ANSI.lavender}")
@@ -547,13 +559,20 @@ modes = {
     "snake": [9, 9, 1],
 }
 
+class Settings:
+    format_first = "column"
 
 # Gameplay loop
 print(f"""
 Hello, welcome to {ANSI.green}Snake{ANSI.end} {ANSI.red}Avoider{ANSI.end}!
 
-At any time, input 'i' for instructions, 'b' for rulebook,
-'f' for formatting info, 'r' to restart/forfeit, or 'q' to quit""")
+At any time, input:
+    'l' for lore
+    'b' for rulebook
+    'f' for formatting info
+    't' to toggle between 'row,column' and 'column,row' formatting (default column,row)
+    'r' to restart/forfeit
+    'q' to quit""")
 
 same = False
 while True:
